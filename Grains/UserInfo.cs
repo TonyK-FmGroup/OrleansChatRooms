@@ -1,5 +1,8 @@
-﻿namespace Grains;
+﻿using Orleans;
 
+namespace Grains;
+
+[GenerateSerializer]
 public record class UserInfo
 {
     public Guid Id { get; private set; }

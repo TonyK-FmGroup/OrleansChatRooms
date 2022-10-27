@@ -6,7 +6,6 @@ using Orleans.Hosting;
 
 Console.WriteLine("Starting chat room simulator...");
 
-
 var host = Host.CreateDefaultBuilder()
                 .UseOrleansClient((ctx, client) =>
                 {
@@ -25,26 +24,29 @@ var clusterClient = host.Services.GetRequiredService<IClusterClient>();
 var lobby = clusterClient.GetGrain<IRoomGrain>(Guid.Empty);
 
 var user1 = clusterClient.GetGrain<IUserGrain>(Guid.NewGuid());
-user1.SetName("Tommy");
-user1.EnterRoom(Guid.Empty);
+await user1.SetName("Tommy");
+await user1.EnterRoom(Guid.Empty);
+var user1id = (await user1.GetUserInfo()).Id;
+
+await lobby.SetName(user1id, "The Lobby");
 
 Thread.Sleep(1000);
 
 var user2 = clusterClient.GetGrain<IUserGrain>(Guid.NewGuid());
-user2.SetName("Peter");
-user2.EnterRoom(Guid.Empty);
+await user2.SetName("Peter");
+await user2.EnterRoom(Guid.Empty);
 
 Thread.Sleep(1000);
 
-user1.SendMessage(Guid.Empty, "Hello, anybody there?");
+await user1.SendMessage(Guid.Empty, "Hello, anybody there?");
 
 Thread.Sleep(1000);
 
-user2.SendMessage(Guid.Empty, "Yes, I'm here! But I'm about to leave!");
+await user2.SendMessage(Guid.Empty, "Yes, I'm here! But I'm about to leave!");
 
 Thread.Sleep(1000);
 
-user2.ExitRoom(Guid.Empty);
+await user2.ExitRoom(Guid.Empty);
 
-
-
+Console.WriteLine("Press any key to exit...");
+Console.ReadKey();
