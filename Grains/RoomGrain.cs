@@ -1,4 +1,7 @@
-﻿using Orleans;
+﻿using Microsoft.Extensions.Logging;
+using Orleans;
+using Orleans.Utilities;
+using System;
 
 namespace Grains;
 
@@ -7,13 +10,20 @@ public interface IRoomGrain : IGrainWithGuidKey
     Task SetName(IUserGrain userGrain, string name);
     Task<string> GetName();
     Task SendMessage(UserInfo user, string message);
-    Task<bool> Enter(UserInfo user);
+    Task<bool> Enter(IUserGrain userGrain, UserInfo userInfo);
     Task Exit(UserInfo user);
 }
 
 public class RoomGrain : Grain, IRoomGrain
 {
     private RoomInfo _roomInfo = null!;
+    private readonly ObserverManager<IUserGrain> _subsManager;
+
+    public RoomGrain(ILogger<IUserGrain> logger)
+    {
+        _subsManager =
+      new ObserverManager<IUserGrain>(TimeSpan.FromMinutes(5), logger);
+    }
 
     public override Task OnActivateAsync(CancellationToken cancellationToken)
     {
@@ -21,16 +31,17 @@ public class RoomGrain : Grain, IRoomGrain
         return base.OnActivateAsync(cancellationToken);
     }
 
-    public async Task<bool> Enter(UserInfo user)
+    public async Task<bool> Enter(IUserGrain userGrain, UserInfo userInfo)
     {
-        if (_roomInfo.Participants.Contains(user.Id))
+        if (_roomInfo.Participants.Contains(userInfo.Id))
         {
             return false;
         }
 
-        _roomInfo.Participants.Add(user.Id);
+        _roomInfo.Participants.Add(userInfo.Id);
+        await Subscribe(userGrain);
 
-        await NotifyAll($"{user.Name} has entered the room.");
+        await NotifyAll($"{userInfo.Name} has entered the room.");
 
         return true;
     }
@@ -47,11 +58,13 @@ public class RoomGrain : Grain, IRoomGrain
 
     public Task SendMessage(UserInfo user, string message)
     {
-        foreach (var userInfo in _roomInfo.Participants)
-        {
-            var userGrain = GrainFactory.GetGrain<IUserGrain>(user.Id);
-            userGrain.ReceiveMessage(_roomInfo, user, message);
-        }
+        /* foreach (var userInfo in _roomInfo.Participants)
+         {
+             var userGrain = GrainFactory.GetGrain<IUserGrain>(user.Id);
+             userGrain.ReceiveMessage(_roomInfo, user, message);
+         }*/
+
+        _subsManager.Notify(s => s.ReceiveMessage(_roomInfo, user, message));
         return Task.CompletedTask;
     }
 
@@ -65,6 +78,19 @@ public class RoomGrain : Grain, IRoomGrain
     }
 
     public Task<string> GetName() => Task.FromResult(_roomInfo.Name);
+
+    public Task Subscribe(IUserGrain observer)
+    {
+        _subsManager.Subscribe(observer, observer);
+        return Task.CompletedTask;
+    }
+
+    /* public Task UnSubscribe(IUserGrain observer)
+     {
+         _subsManager.Unsubscribe(observer, observer);
+
+         return Task.CompletedTask;
+     }*/
 
     private Task NotifyAll(string message)
     {

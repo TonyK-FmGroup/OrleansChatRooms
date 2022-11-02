@@ -1,15 +1,14 @@
 ﻿using Orleans;
-
 namespace Grains;
 
-public interface IUserGrain : IGrainWithGuidKey
+public interface IUserGrain : IGrainWithGuidKey, IGrainObserver
 {
     Task SetName(string name);
     Task<string> GetName();
     Task EnterRoom(Guid roomId);
     Task ExitRoom(Guid roomId);
     Task SendMessage(Guid roomId, string message);
-    Task ReceiveMessage(RoomInfo room, UserInfo user, string message);
+    void ReceiveMessage(RoomInfo room, UserInfo user, string message);
     Task ReceiveNotification(RoomInfo room, string message);
     Task<UserInfo> GetUserInfo();
 }
@@ -24,7 +23,6 @@ public class UserGrain : Grain, IUserGrain
         return base.OnActivateAsync(cancellationToken);
     }
 
-
     public override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
         foreach (var roomInfo in _userInfo.Rooms)
@@ -34,7 +32,6 @@ public class UserGrain : Grain, IUserGrain
         return base.OnDeactivateAsync(reason, cancellationToken);
     }
 
-
     public Task SetName(string name)
     {
         _userInfo = _userInfo with { Name = name };
@@ -43,17 +40,17 @@ public class UserGrain : Grain, IUserGrain
 
     public Task<string> GetName() => Task.FromResult(_userInfo.Name);
 
-    public Task EnterRoom(Guid roomId)
+    public async Task EnterRoom(Guid roomId)
     {
         var room = GrainFactory.GetGrain<IRoomGrain>(roomId);
-        room.Enter(_userInfo);
-        return Task.CompletedTask;
+        var entered = await room.Enter(this.AsReference<IUserGrain>(), _userInfo);
     }
 
     public Task ExitRoom(Guid roomId)
     {
         var room = GrainFactory.GetGrain<IRoomGrain>(roomId);
         room.Exit(_userInfo);
+        
         return Task.CompletedTask;
     }
 
@@ -64,10 +61,9 @@ public class UserGrain : Grain, IUserGrain
         return Task.CompletedTask;
     }
 
-    public Task ReceiveMessage(RoomInfo room, UserInfo user, string message)
+    public void ReceiveMessage(RoomInfo room, UserInfo user, string message)
     {
         Console.WriteLine($"[{room.Name}] {user.Name}: {message}");
-        return Task.CompletedTask;
     }
 
     public Task ReceiveNotification(RoomInfo room, string message)
@@ -94,5 +90,4 @@ public class UserGrain : Grain, IUserGrain
         var userInfo = await userGrain.GetUserInfo();
         return userInfo.Name;
     }
-
 }
