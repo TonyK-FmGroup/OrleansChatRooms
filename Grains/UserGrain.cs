@@ -9,24 +9,35 @@ public interface IUserGrain : IGrainWithGuidKey
     Task EnterRoom(Guid roomId);
     Task ExitRoom(Guid roomId);
     Task SendMessage(Guid roomId, string message);
-    Task ReceiveMessage(Guid roomId, Guid userId, string message);
-    Task ReceiveNotification(Guid roomId, string message);
+    Task ReceiveMessage(RoomInfo room, UserInfo user, string message);
+    Task ReceiveNotification(RoomInfo room, string message);
     Task<UserInfo> GetUserInfo();
 }
 
-
 public class UserGrain : Grain, IUserGrain
 {
-    private readonly UserInfo _userInfo;
+    private UserInfo _userInfo = null!;
 
-    public UserGrain()
+    public override Task OnActivateAsync(CancellationToken cancellationToken)
     {
         _userInfo = new(this.GetPrimaryKey());
+        return base.OnActivateAsync(cancellationToken);
     }
+
+
+    public override Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
+    {
+        foreach (var roomInfo in _userInfo.Rooms)
+        {
+            ExitRoom(roomInfo.Id);
+        }
+        return base.OnDeactivateAsync(reason, cancellationToken);
+    }
+
 
     public Task SetName(string name)
     {
-        _userInfo.Name = name;
+        _userInfo = _userInfo with { Name = name };
         return Task.CompletedTask;
     }
 
@@ -35,37 +46,36 @@ public class UserGrain : Grain, IUserGrain
     public Task EnterRoom(Guid roomId)
     {
         var room = GrainFactory.GetGrain<IRoomGrain>(roomId);
-        room.Enter(_userInfo.Id);
+        room.Enter(_userInfo);
         return Task.CompletedTask;
     }
 
     public Task ExitRoom(Guid roomId)
     {
         var room = GrainFactory.GetGrain<IRoomGrain>(roomId);
-        room.Exit(_userInfo.Id);
+        room.Exit(_userInfo);
         return Task.CompletedTask;
     }
 
     public Task SendMessage(Guid roomId, string message)
     {
         var room = GrainFactory.GetGrain<IRoomGrain>(roomId);
-        room.SendMessage(_userInfo.Id, message);
+        room.SendMessage(_userInfo, message);
         return Task.CompletedTask;
     }
 
-    public async Task ReceiveMessage(Guid roomid, Guid userId, string message)
+    public Task ReceiveMessage(RoomInfo room, UserInfo user, string message)
     {
-        var senderName = await GetUserName(userId);
-        var sendingRoomName = await GetRoomGrain(roomid).GetName();
-        Console.WriteLine($"[{sendingRoomName}] {senderName}: {message}");
+        Console.WriteLine($"[{room.Name}] {user.Name}: {message}");
+        return Task.CompletedTask;
     }
 
-    public async Task ReceiveNotification(Guid roomId, string message)
+    public Task ReceiveNotification(RoomInfo room, string message)
     {
         Console.ForegroundColor = ConsoleColor.Blue;
-        var sendingRoomName = await GetRoomGrain(roomId).GetName();
-        Console.WriteLine($"[{sendingRoomName}] {message}");
+        Console.WriteLine($"[{room.Name}] {message}");
         Console.ResetColor();
+        return Task.CompletedTask;
     }
 
     public Task<UserInfo> GetUserInfo()
@@ -85,8 +95,4 @@ public class UserGrain : Grain, IUserGrain
         return userInfo.Name;
     }
 
-    private IRoomGrain GetRoomGrain(Guid roomId)
-    {
-        return GrainFactory.GetGrain<IRoomGrain>(roomId);
-    }
 }

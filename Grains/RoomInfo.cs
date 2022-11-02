@@ -2,6 +2,7 @@
 
 namespace Grains;
 
+[Immutable]
 [GenerateSerializer]
 public record class RoomInfo
 {

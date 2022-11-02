@@ -26,9 +26,9 @@ var lobby = clusterClient.GetGrain<IRoomGrain>(Guid.Empty);
 var user1 = clusterClient.GetGrain<IUserGrain>(Guid.NewGuid());
 await user1.SetName("Tommy");
 await user1.EnterRoom(Guid.Empty);
-var user1id = (await user1.GetUserInfo()).Id;
 
-await lobby.SetName(user1id, "The Lobby");
+var userinfo = await user1.GetUserInfo();
+await lobby.SetName(user1, "The Lobby");
 
 Thread.Sleep(1000);
 
